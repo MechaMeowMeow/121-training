@@ -58,19 +58,19 @@ Claude Code，Opus 4.8（`claude-opus-4-8`）。
 
 練習 1
 
-1. ✅ 三層職責我講得出來：Web（Controller/ViewModel/View，只負責接線跟顯示）、Core（domain＋service 的商業邏輯：折扣、庫存、狀態轉移）、Infrastructure（EF Core DbContext／repository／migration／種子資料）。
-2. ✅ 對照它的說法時我有抓到不精確的地方：它一度把批次查詢講成「之後另開 commit 的事」，也曾把折扣講得像逐項在套——但實際規則是**只在訂單總額折一次**。
-3. ✅ 我知道商業邏輯要放 Core service，加一個新頁面要動六個地方：Controller→Service→Repository→ViewModel→View→測試。
+1. ✅ **我能不看筆記說出三個專案（Web/Core/Infrastructure）各自的職責** — Web（Controller/ViewModel/View，只負責接線跟顯示）、Core（domain＋service 的商業邏輯：折扣、庫存、狀態轉移）、Infrastructure（EF Core DbContext／repository／migration／種子資料）。
+2. ✅ **我核對過 agent 描述的建單流程，且至少找出一處不精確或過度簡化的說法** — 有抓到：它一度把批次查詢講成「之後另開 commit 的事」，也曾把折扣講得像逐項在套，但實際規則是**只在訂單總額折一次**。
+3. ✅ **我知道商業邏輯應該放在哪一層、新增頁面要動哪些地方** — 商業邏輯放 Core service，加一個新頁面要動六個地方：Controller→Service→Repository→ViewModel→View→測試。
    （補一句：`/init` 產出的 `CLAUDE.md` 現在被 `.gitignore` 擋掉、還沒進版控。）
 
 練習 2
 
-1. ✅ 三個 bug 我都先在頁面重現過才去翻程式。
-2. ✅ 我給 agent 的是具體觀察（新單在第一頁找不到／最後一頁空白、Gold 金額偏低但 Silver 正常、取消後庫存沒加回），不是直接貼客訴。
-3. ✅ 每個修完我都回頁面確認症狀真的不見了。
-4. ✅ 每個 bug 補一個回歸測試，`dotnet test` 全綠（練習 2 結束是 33 個）。
-5. ✅ 三個獨立 commit：`254b8dd`（分頁）、`862f706`（Gold 重複折扣）、`e80411b`（取消沒加回庫存），message 都寫成 症狀 → 根因 → 修法。
-6. **思考題：為什麼原本的測試沒抓到這三個 bug？** 我後來想通了：
+1. ✅ **三個 bug 我都先在頁面上重現過，才開始找程式** — 有，三個都先重現。
+2. ✅ **我給 agent 的資訊包含具體觀察（頁碼／金額數字／庫存數字），而不是只貼客訴原文** — 新單在第一頁找不到／最後一頁空白、Gold 金額偏低但 Silver 正常、取消後庫存沒加回。
+3. ✅ **每個修復都回到頁面驗證過症狀消失** — 有，修完都回頁面確認。
+4. ✅ **每個 bug 都補了一個回歸測試，`dotnet test` 全綠** — 練習 2 結束是 33 個。
+5. ✅ **三個獨立 commit，message 說明症狀與根因** — `254b8dd`（分頁）、`862f706`（Gold 重複折扣）、`e80411b`（取消沒加回庫存），都寫成 症狀 → 根因 → 修法。
+6. **（思考題）為什麼原本的測試沒抓到這三個 bug？** 我後來想通了：
    - 分頁：舊測試 `GetOrders_ReportsTotalCountAndTotalPages` 只驗 `TotalCount`／`TotalPages`，**從來沒檢查某一頁到底回傳哪些列**。
    - Gold：舊 pricing 測試都是**自己 new 一個 Order、直接塞 `UnitPriceSnapshot`**，根本沒走 `CreateOrderAsync`——而雙重折扣就是在建單那條路上發生的。
    - 取消：舊 cancel 測試只驗狀態變 Cancelled，**沒驗庫存有沒有加回**。
@@ -78,18 +78,18 @@ Claude Code，Opus 4.8（`claude-opus-4-8`）。
 
 練習 3
 
-1. ✅ `/Products/LowStock` 不帶參數→門檻 10；`?threshold=3`→結果跟著變。
-2. ✅ `?threshold=0`、`-1`→跳表單驗證錯誤（`[Range(1,9999)]`），不是 500。
-3. ✅ 近 30 天售出數量有排除 Cancelled（`GetSoldQuantitiesAsync` 的 `GROUP BY` 過濾 `Status != Cancelled`）。
-4. ✅ 停售商品不會出現（`IsActive && StockQuantity < threshold`）。
-5. ✅ 分層跟命名沿用既有 Products 的慣例（薄 Controller、邏輯在 service、EF 查詢在 repository、View 綁 ViewModel）；售出量用一條聚合查詢＋記憶體 join，沒有 N+1。
-6. ✅ 補了 3 個 service 測試（門檻過濾＋升冪＋排除停售、排除 Cancelled、排除 30 天前），`dotnet test` 36 全綠。commit `f4313d2`。
+1. ✅ **`/Products/LowStock` 不帶參數 → 門檻 10 的結果；帶 `?threshold=3` → 結果隨之改變** — 有，結果跟著變。
+2. ✅ **`?threshold=0`、`?threshold=-1` → 頁面顯示驗證錯誤，不是 500** — 靠 `[Range(1,9999)]` 擋下。
+3. ✅ **售出數量欄位排除了 Cancelled 訂單（可用一筆已取消的訂單驗證）** — `GetSoldQuantitiesAsync` 的 `GROUP BY` 過濾 `Status != Cancelled`。
+4. ✅ **停售（已停售 badge）商品不出現在列表** — 查詢是 `IsActive && StockQuantity < threshold`。
+5. ✅ **程式分層與命名跟既有的 Products 功能一致（請 agent 自我 review 一次，並自己確認）** — 薄 Controller、邏輯在 service、EF 查詢在 repository、View 綁 ViewModel；售出量用一條聚合查詢＋記憶體 join，沒有 N+1。
+6. ✅ **至少 3 個新測試，`dotnet test` 全綠** — 補了 3 個（門檻過濾＋升冪＋排除停售、排除 Cancelled、排除 30 天前），測試 36 全綠。commit `f4313d2`。
 
 練習 4
 
-1. ✅ 重構完 `dotnet test` 還是全綠（36 → 49）。
-2. ✅ 我講得出「改了什麼、沒改什麼」：抽出 `OrderValidator` 讓驗證有個單一的家、還能單獨測；`GetByIdAsync` → `GetByIdsAsync` 批次查詢把 N+1 幹掉（建單 1+N→1+1、取消 N→1）。**沒動的**是錯誤訊息字串、檢查順序、短路 vs 收集的語意、扣／加庫存的副作用位置，還有回傳型別。
-3. ✅ 我用 code review 的眼睛看過 diff，還補了 13 個測試：直接測 `OrderValidator` 每條分支、`GetByIdsAsync` 的契約、多商品建單／取消的 roundtrip。commit `28c14f2`。
+1. ✅ **重構後 `dotnet test` 全綠** — 36 → 49，全綠。
+2. ✅ **我能說出這次重構「改善了什麼、沒有改變什麼」** — 抽出 `OrderValidator` 讓驗證有個單一的家、還能單獨測；`GetByIdAsync` → `GetByIdsAsync` 批次查詢把 N+1 幹掉（建單 1+N→1+1、取消 N→1）。**沒動的**是錯誤訊息字串、檢查順序、短路 vs 收集的語意、扣／加庫存的副作用位置，還有回傳型別。
+3. ✅ **我有在 code review 的角度看過 diff（不是 agent 說好就好）** — 有，還補了 13 個測試：直接測 `OrderValidator` 每條分支、`GetByIdsAsync` 的契約、多商品建單／取消的 roundtrip。commit `28c14f2`。
 
 ---
 
