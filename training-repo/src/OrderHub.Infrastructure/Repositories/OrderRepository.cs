@@ -29,7 +29,8 @@ public class OrderRepository : IOrderRepository
 
         var items = await query
             .OrderByDescending(o => o.CreatedAt)
-            .Skip(page * pageSize)
+            // page 為 1-based（controller 預設 1、View 分頁列從 1 起算），故第 1 頁不可略過任何資料。
+            .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
 
