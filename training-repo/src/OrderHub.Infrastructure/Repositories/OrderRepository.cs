@@ -58,6 +58,24 @@ public class OrderRepository : IOrderRepository
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
 
+    // 近 N 天（since 之後）各商品售出數量，排除 Cancelled 訂單。單一 GROUP BY 聚合，無 N+1。
+    public async Task<IReadOnlyDictionary<int, int>> GetSoldQuantitiesAsync(DateTime since, IEnumerable<int> productIds)
+    {
+        var ids = productIds.ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, int>();
+
+        var rows = await _db.OrderItems
+            .Where(i => ids.Contains(i.ProductId)
+                && i.Order!.Status != OrderStatus.Cancelled
+                && i.Order.CreatedAt >= since)
+            .GroupBy(i => i.ProductId)
+            .Select(g => new { ProductId = g.Key, Sold = g.Sum(x => x.Quantity) })
+            .ToListAsync();
+
+        return rows.ToDictionary(r => r.ProductId, r => r.Sold);
+    }
+
     public async Task AddAsync(Order order) => await _db.Orders.AddAsync(order);
 
     public Task SaveChangesAsync() => _db.SaveChangesAsync();

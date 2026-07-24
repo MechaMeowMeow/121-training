@@ -31,5 +31,24 @@ public class ProductsController : Controller
 
         return View(vm);
     }
+
+    public async Task<IActionResult> LowStock(LowStockViewModel vm)
+    {
+        // threshold <= 0 由 ViewModel 的 [Range] 擋下；不合法就回表單顯示錯誤，不查詢、不 500。
+        if (!ModelState.IsValid)
+            return View(vm);
+
+        var items = await _productService.GetLowStockAsync(vm.Threshold);
+
+        vm.Items = items.Select(i => new LowStockRowViewModel
+        {
+            Sku = i.Sku,
+            Name = i.Name,
+            StockQuantity = i.StockQuantity,
+            SoldLast30Days = i.SoldLast30Days
+        }).ToList();
+
+        return View(vm);
+    }
 }
 

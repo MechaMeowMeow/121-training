@@ -20,6 +20,13 @@ public class ProductRepository : IProductRepository
     public async Task<IReadOnlyList<Product>> GetActiveAsync() =>
         await _db.Products.Where(p => p.IsActive).OrderBy(p => p.Sku).ToListAsync();
 
+    // 只含販售中、庫存嚴格小於 threshold 者，依庫存量升冪（採購最急的排最前）。
+    public async Task<IReadOnlyList<Product>> GetLowStockAsync(int threshold) =>
+        await _db.Products
+            .Where(p => p.IsActive && p.StockQuantity < threshold)
+            .OrderBy(p => p.StockQuantity)
+            .ToListAsync();
+
     public Task<Product?> GetByIdAsync(int id) =>
         _db.Products.FirstOrDefaultAsync(p => p.Id == id);
 
