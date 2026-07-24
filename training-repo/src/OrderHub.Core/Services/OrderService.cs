@@ -35,42 +35,35 @@ public class OrderService : IOrderService
     public async Task<ServiceResult<Order>> CreateOrderAsync(int customerId, IReadOnlyList<NewOrderLine> lines)
     {
         var customer = await _customerRepository.GetByIdAsync(customerId);
-        if (customer is null)
-            return ServiceResult<Order>.Fail("找不到指定的客戶");
 
-        if (lines is null || lines.Count == 0)
-            return ServiceResult<Order>.Fail("訂單至少需要一項商品");
+        var requestError = OrderValidator.ValidateRequest(customer, lines);
+        if (requestError is not null)
+            return ServiceResult<Order>.Fail(requestError);
 
-        if (lines.Any(l => l.Quantity <= 0))
-            return ServiceResult<Order>.Fail("商品數量必須大於 0");
-
-        if (lines.Select(l => l.ProductId).Distinct().Count() != lines.Count)
-            return ServiceResult<Order>.Fail("同一商品請勿重複加入，請調整數量即可");
-
-        var errors = new List<string>();
         var order = new Order
         {
-            CustomerId = customer.Id,
+            CustomerId = customer!.Id,
             Status = OrderStatus.Pending,
             CreatedAt = DateTime.UtcNow
         };
 
+        // 一次撈回所有明細的商品（明細已保證不重複），迴圈內以字典查表，避免逐列查詢的 N+1。
+        var products = (await _productRepository.GetByIdsAsync(lines.Select(l => l.ProductId)))
+            .ToDictionary(p => p.Id);
+
+        var errors = new List<string>();
         foreach (var line in lines)
         {
-            var product = await _productRepository.GetByIdAsync(line.ProductId);
-            if (product is null || !product.IsActive)
+            products.TryGetValue(line.ProductId, out var product);
+
+            var lineError = OrderValidator.ValidateLine(product, line);
+            if (lineError is not null)
             {
-                errors.Add($"商品（Id={line.ProductId}）不存在或已停售");
+                errors.Add(lineError);
                 continue;
             }
 
-            if (product.StockQuantity < line.Quantity)
-            {
-                errors.Add($"商品「{product.Name}」庫存不足（現有 {product.StockQuantity}，需求 {line.Quantity}）");
-                continue;
-            }
-
-            product.StockQuantity -= line.Quantity;
+            product!.StockQuantity -= line.Quantity;
 
             // 單價快照存「原價」，會員折扣只在 CalculateTotal 對訂單總額折抵一次；
             // 若在此先打折，Gold 會員會被 CalculateTotal 再折一次（0.9 × 0.9）造成金額偏低。
@@ -102,10 +95,11 @@ public class OrderService : IOrderService
 
         // 上方已確認只有 Pending / Confirmed 可取消，兩者皆已在建單時扣過庫存，取消時一律加回。
         // 務必在改狀態「之前」加回庫存：若先設成 Cancelled，下方任何以狀態為條件的判斷都會失準。
+        var products = (await _productRepository.GetByIdsAsync(order.Items.Select(i => i.ProductId)))
+            .ToDictionary(p => p.Id);
         foreach (var item in order.Items)
         {
-            var product = await _productRepository.GetByIdAsync(item.ProductId);
-            if (product is not null)
+            if (products.TryGetValue(item.ProductId, out var product))
                 product.StockQuantity += item.Quantity;
         }
 

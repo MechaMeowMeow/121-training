@@ -68,6 +68,28 @@ public class OrderServiceCancelTests
     }
 
     [Fact]
+    public async Task CancelOrder_MultipleProducts_RestoresEachProductStock()
+    {
+        using var db = TestSetup.CreateContext();
+        var service = TestSetup.CreateOrderService(db);
+        var customer = TestSetup.AddCustomer(db);
+        var p1 = TestSetup.AddProduct(db, stock: 10, sku: "SKU-CC1");
+        var p2 = TestSetup.AddProduct(db, stock: 20, sku: "SKU-CC2");
+        var created = await service.CreateOrderAsync(customer.Id, new[]
+        {
+            new NewOrderLine(p1.Id, 3),
+            new NewOrderLine(p2.Id, 5)
+        });
+        Assert.True(created.Success);
+
+        var cancel = await service.CancelOrderAsync(created.Value!.Id);
+
+        Assert.True(cancel.Success);
+        Assert.Equal(10, db.Products.Single(p => p.Id == p1.Id).StockQuantity);
+        Assert.Equal(20, db.Products.Single(p => p.Id == p2.Id).StockQuantity);
+    }
+
+    [Fact]
     public async Task CancelOrder_NotFound_Fails()
     {
         using var db = TestSetup.CreateContext();

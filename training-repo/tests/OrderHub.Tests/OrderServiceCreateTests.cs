@@ -51,6 +51,27 @@ public class OrderServiceCreateTests
     }
 
     [Fact]
+    public async Task CreateOrder_MultipleProducts_DecrementsEachProductStock()
+    {
+        using var db = TestSetup.CreateContext();
+        var service = TestSetup.CreateOrderService(db);
+        var customer = TestSetup.AddCustomer(db);
+        var p1 = TestSetup.AddProduct(db, stock: 10, sku: "SKU-M1");
+        var p2 = TestSetup.AddProduct(db, stock: 20, sku: "SKU-M2");
+
+        var result = await service.CreateOrderAsync(customer.Id, new[]
+        {
+            new NewOrderLine(p1.Id, 3),
+            new NewOrderLine(p2.Id, 5)
+        });
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.Value!.Items.Count);
+        Assert.Equal(7, db.Products.Single(p => p.Id == p1.Id).StockQuantity);
+        Assert.Equal(15, db.Products.Single(p => p.Id == p2.Id).StockQuantity);
+    }
+
+    [Fact]
     public async Task CreateOrder_UnknownCustomer_Fails()
     {
         using var db = TestSetup.CreateContext();

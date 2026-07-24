@@ -27,8 +27,15 @@ public class ProductRepository : IProductRepository
             .OrderBy(p => p.StockQuantity)
             .ToListAsync();
 
-    public Task<Product?> GetByIdAsync(int id) =>
-        _db.Products.FirstOrDefaultAsync(p => p.Id == id);
+    // 一次撈回多個商品（追蹤實體，供扣庫存／加回庫存後統一 SaveChanges）。避免逐列查詢造成 N+1。
+    public async Task<IReadOnlyList<Product>> GetByIdsAsync(IEnumerable<int> ids)
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0)
+            return Array.Empty<Product>();
+
+        return await _db.Products.Where(p => idList.Contains(p.Id)).ToListAsync();
+    }
 
     public Task SaveChangesAsync() => _db.SaveChangesAsync();
 }
