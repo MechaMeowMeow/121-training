@@ -50,6 +50,24 @@ public class OrderServiceCancelTests
     }
 
     [Fact]
+    public async Task CancelOrder_RestoresProductStock()
+    {
+        using var db = TestSetup.CreateContext();
+        var service = TestSetup.CreateOrderService(db);
+        var customer = TestSetup.AddCustomer(db);
+        var product = TestSetup.AddProduct(db, stock: 50);
+
+        var created = await service.CreateOrderAsync(customer.Id, new[] { new NewOrderLine(product.Id, 8) });
+        Assert.True(created.Success);
+        Assert.Equal(42, db.Products.Single(p => p.Id == product.Id).StockQuantity); // 建單先扣 8
+
+        var cancel = await service.CancelOrderAsync(created.Value!.Id);
+
+        Assert.True(cancel.Success);
+        Assert.Equal(50, db.Products.Single(p => p.Id == product.Id).StockQuantity); // 取消後應加回原庫存
+    }
+
+    [Fact]
     public async Task CancelOrder_NotFound_Fails()
     {
         using var db = TestSetup.CreateContext();
