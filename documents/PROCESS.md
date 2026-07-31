@@ -93,6 +93,42 @@ Claude Code，Opus 4.8（`claude-opus-4-8`）。
 
 ---
 
+## 第二階段 — 自建 MCP Server
+
+### 練習 3 — 註冊給 agent，做 before/after 對照
+
+**做了什麼**：把練習 1 寫好的 OrderHub MCP server 用 `training-repo/.mcp.json` 註冊給 Claude Code（進 git 全隊共用）：
+
+```json
+{ "mcpServers": { "orderhub": { "command": "dotnet", "args": ["run", "--project", "src/OrderHub.Mcp"] } } }
+```
+
+**對照實驗**，同一個問題問兩次：**「哪些商品庫存低於 5？」**
+
+- **關掉 orderhub（before）**：agent 手上沒有現成工具，只能自己繞。我實際的繞法是**直接對 `localhost/OrderHubTraining` 打一段 raw SQL**——這代表我得先知道連線字串、知道表叫 `Products`、知道欄位是 `StockQuantity`／`IsActive`、**還得自己記得「停售商品要排除」這條業務規則、自己 `ORDER BY` 排序**。查法：
+
+  ```sql
+  SELECT Sku, Name, StockQuantity, IsActive FROM Products WHERE StockQuantity < 5 ORDER BY StockQuantity
+  ```
+
+  （附帶一提：環境裡那個通用 `mssql` MCP 指向的是別台 SQL Server，連不到本機這顆 DB，所以我還得改用 ADO.NET 自己接——「繞遠路」是真的繞。）
+
+- **開啟 orderhub（after）**：一次工具呼叫就結束，`low_stock(threshold=5)`。業務規則（只算在售、已升冪排序）都包在工具裡，我什麼都不用記：
+
+  ```
+  low_stock(5) → SKU-1048(2)、SKU-1005(3)、SKU-1023(3)、SKU-1014(4)、SKU-1032(4)
+  ```
+
+**兩次的差異（重點）**：
+
+1. **答案數字一模一樣**（5 筆，如上），這反而是好消息——證明工具沒亂算。
+2. **但「要記在腦子裡的東西」差很多**：before 我得自扛 schema＋`IsActive` 過濾＋排序三件事；after 全部由 server 收斂。這次種子資料剛好**沒有「庫存<5 且已停售」的商品**，所以我漏不漏 `IsActive` 數字都一樣；**只要哪天有一筆停售低庫存商品，天真 SQL 就會默默多算，`low_stock` 不會**——工具把這條規則變成「不可能忘」。
+3. **這正是活動講義說的**：description 決定 agent 用不用得對。`low_stock` 的一句「列出庫存低於門檻**且仍在販售**的商品」，就是把 `IsActive` 這條規則寫進 agent 的認知裡，不靠我臨場記得。
+
+**`/mcp` 驗證的小提醒**：`.mcp.json` 是**專案範圍**的 server，Claude Code 第一次看到會跳「是否信任這個來自 `.mcp.json` 的 server」的確認；按信任後 `/mcp` 才會列出 `orderhub` 與三個工具。也就是說這顆 server 的啟用點跟練習 4 那個「破壞性工具要人工確認」是同一套授權心智——**工具要先被人點頭才會動**。
+
+---
+
 ## 附錄：值得留下的對話片段
 
 （貼 1–2 段最有代表性的 prompt 與回應**摘要**——不用貼全文，重點是「我怎麼問」和「它怎麼答」。）
